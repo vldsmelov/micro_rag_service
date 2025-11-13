@@ -2,13 +2,13 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
 
-from models import DocumentAnalysisResponse, SourceItem
-from services import (
+from app.models import DocumentAnalysisResponse, SourceItem
+from app.services import (
     collect_legal_context_for_document,
     ask_llm,
     parse_analysis_json,
 )
-from prompts.document_analysis_prompt import build_document_analysis_prompt
+from app.prompts.document_analysis_prompt import build_document_analysis_prompt
 
 
 router = APIRouter()

@@ -2,9 +2,9 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException
 
-from models import AskRequest, AskResponse, SourceItem
-from services import get_embedding, search_qdrant, ask_llm
-from prompts.ask_prompt import build_ask_prompt
+from app.models import AskRequest, AskResponse, SourceItem
+from app.services import get_embedding, search_qdrant, ask_llm
+from app.prompts.ask_prompt import build_ask_prompt
 
 
 router = APIRouter()

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
-from routes.ask import router as ask_router
-from routes.analyze_document import router as analyze_router
+from app.routes.ask import router as ask_router
+from app.routes.analyze_document import router as analyze_router
 
 
 app = FastAPI(
