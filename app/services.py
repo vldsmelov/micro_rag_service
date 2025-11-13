@@ -1,6 +1,5 @@
 import os
 import json
-import textwrap
 from typing import List, Any, Dict
 
 import requests
@@ -172,39 +171,27 @@ def collect_legal_context_for_document(
     return sorted_points[:total_limit]
 
 
-# ---------- Парсинг JSON для анализа документа ----------
+# ---------- Парсер JSON для анализа документа ----------
 
-def parse_analysis_json(raw: str) -> tuple[str, str, str, str | None]:
+def parse_document_analysis_json(raw: str) -> Dict[str, Any]:
     """
-    Парсим JSON от модели для анализа документа.
-    Если не получилось — возвращаем grade="unknown" и explanation = сырой ответ.
+    Пытается распарсить ответ модели как JSON.
+    Возвращает dict (может быть пустым, если всё плохо).
     """
-    data: Dict[str, Any] = {}
-
+    # 1. Прямая попытка
     try:
-        data = json.loads(raw)
+        return json.loads(raw)
     except json.JSONDecodeError:
-        start = raw.find("{")
-        end = raw.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            try:
-                data = json.loads(raw[start:end + 1])
-            except json.JSONDecodeError:
-                data = {}
+        pass
 
-    grade_raw = (data.get("grade") or "").strip().upper()
-    grade_map = {"GREEN": "green", "YELLOW": "yellow", "RED": "red"}
-    grade = grade_map.get(grade_raw, "unknown")
+    # 2. Вырезаем от первой { до последней }
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        candidate = raw[start:end + 1]
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            return {}
 
-    label_map = {
-        "green": "Зелёный",
-        "yellow": "Жёлтый",
-        "red": "Красный",
-        "unknown": "Не определён",
-    }
-    grade_label = data.get("grade_label_ru") or label_map[grade]
-
-    explanation = (data.get("explanation") or "").strip() or raw
-    recommendations = (data.get("recommendations") or "").strip() or None
-
-    return grade, grade_label, explanation, recommendations
+    return {}

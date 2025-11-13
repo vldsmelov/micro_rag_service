@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Отчёт по договору — {{ analysis.score|round(1) }}/{{ analysis.score_max|int }} ({{ analysis.grade }})</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Roboto","Helvetica Neue",sans-serif;
+           color:#111827; background:#f3f4f6; margin:0; padding:0; }
+    .page { max-width:980px; margin:24px auto; padding:0 16px; }
+    .card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:18px; margin:12px 0; }
+    h1 { font-size:20px; margin:6px 0 0 0; }
+    h2 { font-size:18px; margin:0 0 8px 0; }
+    small { color:#6b7280; }
+    .badge { display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+    .badge-green { background:#16a34a; color:#fff; }
+    .badge-yellow { background:#facc15; color:#92400e; }
+    .badge-red { background:#ef4444; color:#fff; }
+    .badge-unknown { background:#6b7280; color:#fff; }
+    .sections-table { width:100%; border-collapse:collapse; }
+    .sections-table th,
+    .sections-table td { padding:8px 12px; border-bottom:1px solid #e5e7eb; text-align:left; font-size:14px; }
+    .sections-table th { background:#f9fafb; }
+    .bar-bg { background:#e5e7eb; height:8px; border-radius:6px; overflow:hidden; }
+    .bar-fill { height:8px; background:#3b82f6; }
+    .muted { color:#6b7280; }
+    .risk-list li { margin-bottom:6px; }
+    pre { white-space:pre-wrap; background:#f8fafc; border-radius:8px; padding:12px; border:1px solid #e5e7eb; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <!-- Заголовок -->
+    <div class="card" style="display:flex;align-items:center;gap:12px">
+      {% set badge_class = "badge-" + analysis.grade %}
+      <div class="badge {{ badge_class }}">{{ analysis.grade }}</div>
+      <h1>Итоговый скор: {{ analysis.score|round(1) }}/{{ analysis.score_max|int }} ({{ analysis.grade_label }})</h1>
+      <div style="margin-left:auto;text-align:right">
+        {% if original_filename %}
+          <small>Файл: {{ original_filename }}</small><br>
+        {% endif %}
+        <small>{{ created_at }}</small>
+      </div>
+    </div>
+
+    <!-- Краткое резюме -->
+    <div class="card">
+      <h2>Краткое резюме</h2>
+      <p>
+        {{ analysis.summary }}
+      </p>
+
+      {% if doc_preview %}
+        <details style="margin-top:8px">
+          <summary style="cursor:pointer"><b>Показать текст договора (фрагмент)</b></summary>
+          <pre>{{ doc_preview }}</pre>
+        </details>
+      {% endif %}
+    </div>
+
+    <!-- Куда смотреть в первую очередь -->
+    {% if analysis.key_risks %}
+    <div class="card">
+      <h2>Куда смотреть в первую очередь</h2>
+      <ul class="risk-list">
+        {% for risk in analysis.key_risks %}
+          <li>
+            {% if risk.title %}
+              <b>{{ risk.title }}</b> —
+            {% endif %}
+            {{ risk.issue }}
+            {% if risk.recommendation %}
+              <br><i class="muted">{{ risk.recommendation }}</i>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <!-- Секции и баллы -->
+    <div class="card">
+      <h2>Секции и баллы</h2>
+      <table class="sections-table">
+        <thead>
+          <tr>
+            <th>Раздел</th>
+            <th>Баллы</th>
+            <th style="width:180px">Уровень</th>
+            <th>Комментарий</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in analysis.sections %}
+            {% set percent = (s.score / s.max_score * 100) if s.max_score > 0 else 0 %}
+            <tr>
+              <td>{{ s.title }}</td>
+              <td style="white-space:nowrap">{{ "%.1f"|format(s.score) }} / {{ "%.0f"|format(s.max_score) }}</td>
+              <td>
+                <div class="bar-bg">
+                  <div class="bar-fill" style="width:{{ percent|round(0) }}%"></div>
+                </div>
+              </td>
+              <td class="muted">
+                {% if s.comment %}
+                  {{ s.comment }}
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Замечания и рекомендации -->
+    {% if analysis.recommendations %}
+    <div class="card">
+      <h2>Замечания и рекомендации</h2>
+      <p>{{ analysis.recommendations }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Нормативные источники -->
+    {% if analysis.sources %}
+    <div class="card">
+      <h2>Нормативные источники</h2>
+      <ul>
+        {% for src in analysis.sources %}
+          <li>
+            [{{ src.rank }}]
+            {% if src.source %}
+              {{ src.source }}
+            {% else %}
+              id={{ src.id }}
+            {% endif %}
+            {% if src.score is not none %}
+              <span class="muted">(score={{ "%.3f"|format(src.score) }})</span>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+  </div>
+</body>
+</html>

@@ -17,3 +17,5 @@ services:
     # ports:
     #   - "8001:8001"
     # и использовать host.docker.internal в OLLAMA_URL/QDRANT_URL
+    volumes:
+      - ./reports:/app/reports
