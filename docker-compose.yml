@@ -1,0 +1,19 @@
+services:
+  legal-rag-service:
+    build: .
+    container_name: legal-rag-service
+    network_mode: "host"
+    environment:
+      # Порты Ollama и Qdrant на ХОСТЕ — поправь при необходимости
+      OLLAMA_URL: "http://localhost:11434"
+      QDRANT_URL: "http://localhost:6333"
+
+      QDRANT_COLLECTION: "docs"
+      EMBED_MODEL: "bge-m3"
+      LLM_MODEL: "krith/qwen2.5-32b-instruct:IQ4_XS"
+      OLLAMA_API_MODE: "ollama"
+
+    # Если не хочешь network_mode: host, можно так:
+    # ports:
+    #   - "8001:8001"
+    # и использовать host.docker.internal в OLLAMA_URL/QDRANT_URL
