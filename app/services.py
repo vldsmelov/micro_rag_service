@@ -172,26 +172,111 @@ def collect_legal_context_for_document(
 
 
 # ---------- Парсер JSON для анализа документа ----------
+import json
+from typing import Any, Dict, Optional
+
+
+def strip_code_fences(text: str) -> str:
+    """
+    Убирает обёртку ```...``` или ```json ...``` если она есть.
+    """
+    if not text:
+        return text
+
+    t = str(text).strip()
+    if not t.startswith("```"):
+        return t
+
+    # убираем первую строку ``` или ```json
+    first_nl = t.find("\n")
+    if first_nl != -1:
+        t = t[first_nl + 1 :].strip()
+
+    # убираем закрывающий ```
+    if t.endswith("```"):
+        t = t[:-3].strip()
+
+    return t
+
+
+def _load_json_candidate(value: str) -> Optional[Dict[str, Any]]:
+    """
+    Пытается интерпретировать строку как JSON-объект.
+    - срезает ```...``` если есть,
+    - сначала пробует целиком,
+    - если не получилось, вырезает от первой { до последней }.
+    """
+    if not isinstance(value, str):
+        return None
+
+    s = strip_code_fences(value).strip()
+    if not s:
+        return None
+
+    # прямая попытка
+    try:
+        obj = json.loads(s)
+        if isinstance(obj, dict):
+            return obj
+    except json.JSONDecodeError:
+        pass
+
+    # попытка по подстроке { ... }
+    start = s.find("{")
+    end = s.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        candidate = s[start : end + 1]
+        try:
+            obj = json.loads(candidate)
+            if isinstance(obj, dict):
+                return obj
+        except json.JSONDecodeError:
+            return None
+
+    return None
+
 
 def parse_document_analysis_json(raw: str) -> Dict[str, Any]:
     """
     Пытается распарсить ответ модели как JSON.
-    Возвращает dict (может быть пустым, если всё плохо).
+    1) Парсим внешний JSON.
+    2) Если в поле summary лежит строка с JSON — считаем её основным объектом.
+    Возвращает dict с полями:
+      - summary: str
+      - recommendations: str
+      - sections: list[dict]
+      - key_risks: list[dict]
+    Если ничего толкового не получилось — {}.
     """
-    # 1. Прямая попытка
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        pass
+    if not raw:
+        return {}
 
-    # 2. Вырезаем от первой { до последней }
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start != -1 and end != -1 and end > start:
-        candidate = raw[start:end + 1]
-        try:
-            return json.loads(candidate)
-        except json.JSONDecodeError:
-            return {}
+    # 1. Внешний JSON
+    outer = _load_json_candidate(raw)
+    if not outer:
+        return {}
 
-    return {}
+    data: Dict[str, Any] = dict(outer)
+
+    # 2. Проверяем, не спрятан ли "настоящий" JSON внутри summary
+    inner: Optional[Dict[str, Any]] = None
+    summary_field = data.get("summary")
+    if isinstance(summary_field, str):
+        inner = _load_json_candidate(summary_field)
+
+    # Если внутри есть JSON с ключом "summary" — считаем его основным
+    if isinstance(inner, dict) and "summary" in inner:
+        data = inner
+
+    result: Dict[str, Any] = {
+        "summary": (data.get("summary") or "").strip(),
+        "recommendations": (data.get("recommendations") or "").strip(),
+        "sections": data.get("sections") or [],
+        "key_risks": data.get("key_risks") or [],
+    }
+
+    # Если совсем пусто, считаем парсинг неудачным
+    if not result["summary"] and not result["sections"]:
+        return {}
+
+    return result

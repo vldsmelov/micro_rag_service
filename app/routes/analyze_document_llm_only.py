@@ -9,15 +9,11 @@ from app.models import (
     KeyRisk,
 )
 from app.services import (
-    collect_legal_context_for_document,
     ask_llm,
     parse_document_analysis_json,
 )
 from app.prompts.document_analysis_prompt_doc_only import (
     build_document_analysis_prompt_doc_only,
-)
-from app.prompts.document_analysis_prompt import (
-    build_document_analysis_prompt,
 )
 from app.render.report_renderer import render_html_report
 
@@ -78,16 +74,16 @@ def compute_grade(total_score: float, max_score: float) -> str:
         return "red"
 
 
-@router.post("/analyze_document", response_model=DocumentAnalysisResponse)
-def analyze_document(
+@router.post("/analyze_document_llm", response_model=DocumentAnalysisResponse)
+def analyze_document_llm_only(
     document: UploadFile = File(..., description="Plain text .txt документ"),
-    top_k: int = 10,
 ):
     """
-    Двухшаговый анализ договора:
-    1) Модель смотрит только на текст (логика, структура).
-    2) Модель перепроверяет оценки с учётом НПА (RAG).
-    Итог: 10 оценок по осям + суммарный скор/grade (считаются на бэкенде).
+    Анализ договора силами LLM БЕЗ RAG.
+    - Смотрим только в текст договора.
+    - Оцениваем по 10 фиксированным осям.
+    - Считаем суммарный скор и grade на бэкенде.
+    - Источники (sources) остаются пустыми.
     """
     raw_bytes = document.file.read()
     if not raw_bytes:
@@ -99,35 +95,13 @@ def analyze_document(
     except UnicodeDecodeError:
         document_text = raw_bytes.decode("cp1251", errors="replace")
 
-    # ---------- ШАГ 1: анализ документа без RAG ----------
-    prompt_doc_only = build_document_analysis_prompt_doc_only(document_text)
-    llm_doc_raw = ask_llm(prompt_doc_only)
-    doc_only_data = parse_document_analysis_json(llm_doc_raw)
+    # Шаг 1 (doc-only) — используем как основной и единственный
+    prompt_doc = build_document_analysis_prompt_doc_only(document_text)
+    llm_raw = ask_llm(prompt_doc)
+    data = parse_document_analysis_json(llm_raw)
 
-    # ---------- ШАГ 2: RAG-анализ (при наличии контекста) ----------
-    legal_points = collect_legal_context_for_document(
-        document_text=document_text,
-        per_chunk_k=3,
-        max_chunks=5,
-        total_limit=top_k,
-    )
-
-    rag_data = {}
-    if legal_points:
-        prompt_rag = build_document_analysis_prompt(
-            document_text=document_text,
-            docs=legal_points,
-            pre_analysis=doc_only_data or {},
-        )
-        llm_rag_raw = ask_llm(prompt_rag)
-        rag_data = parse_document_analysis_json(llm_rag_raw)
-
-    # ---------- Выбираем финальный анализ: RAG > doc-only ----------
-    data = rag_data if rag_data else doc_only_data
-
-    # Если вообще ничего разобрать не удалось:
     if not data:
-        summary = "Модель не смогла распознать структуру ответа. Проверьте, что промпт и формат JSON для анализа документа заданы корректно."
+        summary = "Модель не смогла корректно распарсить ответ. Проверьте формат промпта и ответа."
         recommendations = None
         sections_data = []
         key_risks_data = []
@@ -145,7 +119,6 @@ def analyze_document(
         if not raw_code:
             continue
 
-        # маппим нестандартные коды в наши
         code = CODE_NORMALIZATION.get(raw_code, raw_code)
 
         if code in EXCLUDED_SECTION_CODES:
@@ -235,17 +208,8 @@ def analyze_document(
             recommendation=recommendation_r,
         ))
 
-    # ---------- Источники НПА ----------
+    # ---------- Источники НПА (для LLM-only — пусто) ----------
     sources: List[SourceItem] = []
-    for i, point in enumerate(legal_points or [], start=1):
-        payload = point.get("payload", {}) or {}
-        sources.append(SourceItem(
-            rank=i,
-            id=point.get("id"),
-            score=point.get("score"),
-            source=payload.get("source"),
-            chunk_idx=payload.get("chunk_idx"),
-        ))
 
     # ---------- Собираем ответ ----------
     resp = DocumentAnalysisResponse(
